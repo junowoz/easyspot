@@ -8,4 +8,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
     }
+
+    val textButton = findViewById<Button>(R.id.incrementButton)
+    textButton.setOnClickListener {
+        // Respond to button press
+    }
 }
