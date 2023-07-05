@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "computer-vision-spot",
-    "slug": "computer-vision-spot",
+    "name": "easyspot",
+    "slug": "easyspot",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
