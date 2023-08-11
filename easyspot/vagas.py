@@ -1,97 +1,86 @@
 import cv2
 import numpy as np
 
-# Coordenadas pré-definidas das vagas de estacionamento
-vagas = [[1, 89, 108, 213],
-         [115, 87, 152, 211],
-         [289, 89, 138, 212],
-         [439, 87, 135, 212],
-         [591, 90, 132, 206],
-         [738, 93, 139, 204],
-         [881, 93, 138, 201],
-         [1027, 94, 147, 202]]
+# Coordenadas das vagas
+vagas = [
+    [1, 89, 108, 213],
+    [115, 87, 152, 211],
+    [289, 89, 138, 212],
+    [439, 87, 135, 212],
+    [591, 90, 132, 206],
+    [738, 93, 139, 204],
+    [881, 93, 138, 201],
+    [1027, 94, 147, 202]
+]
 
-# Iniciar a captura de vídeo (0 é geralmente a webcam padrão)
-cap = cv2.VideoCapture('http://192.168.0.210:8081/')
+# Carregar o vídeo
+video = cv2.VideoCapture('video.mp4')
 
-# Verificar se a câmera foi aberta corretamente
-if not cap.isOpened():
-    print("Erro ao abrir a câmera.")
-    exit()
+# Criação do kernel para dilatação
+kernel = np.ones((3, 3), np.int8)
 
-# Rodar o vídeo
+# Loop do vídeo
 while True:
-    # Lê um frame do vídeo
-    check, frame = cap.read()
+    # Ler o próximo frame do vídeo
+    ret, frame = video.read()
 
-    # Verificar se o frame foi capturado corretamente
-    if not check:
-        print("Erro ao ler o frame.")
-        break
+    if not ret:
+        video.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        continue
 
-    # Transforma o frame para escala de cinza
-    frameCinza = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) 
+    # Converter o frame para escala de cinza
+    frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    # Binariza a imagem usando threshold adaptativo para desconsiderar sombras
-    frameTh = cv2.adaptiveThreshold(frameCinza, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 25, 16)  
+    # Aplicar threshold adaptativo
+    frame_th = cv2.adaptiveThreshold(frame_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 25, 16)
 
-    # Aplica blur mediano para reduzir ruído na imagem
-    frameBlur = cv2.medianBlur(frameTh, 5) 
+    # Aplicar mediana para remover ruídos
+    frame_blur = cv2.medianBlur(frame_th, 5)
 
-    # Cria um kernel 3x3
-    kernel = np.ones((3,3), np.int8) 
+    # Dilatar a imagem para melhorar as áreas brancas
+    frame_dil = cv2.dilate(frame_blur, kernel)
 
-    # Aplica dilatação para realçar características na imagem
-    frameDil = cv2.dilate(frameBlur, kernel) 
+    # Contagem de vagas abertas
+    qt_vagas_abertas = 0
 
-    # Contadores de vagas
-    qtVagasAbertas = 0
-    qtVagasOcupadas = 0
+    # Percorrer as vagas
+    for x, y, w, h in vagas:
+        # Recortar a região de interesse
+        roi = frame_dil[y:y + h, x:x + w]
 
-    # Percorre as coordenadas das vagas 
-    for x,y,w,h in vagas:
-        # Recorta a imagem para pegar apenas a vaga 
-        recorte = frameDil[y:y+h, x:x+w] 
+        # Contar pixels brancos
+        qt_px_branco = cv2.countNonZero(roi)
 
-        # Conta quantos pixels brancos tem na imagem
-        qtPxBranco = cv2.countNonZero(recorte) 
-
-        # Escreve na imagem a quantidade de pixels brancos
-        cv2.putText(frame, str(qtPxBranco), (x,y+h-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,255), 1)
-
-        # Cor padrão para vagas desocupadas
-        cor = (0, 255, 0) 
-
-        # Verifica se a vaga está ocupada (quantidade de pixels brancos maior que 3000)
-        if qtPxBranco > 3000:
-            # Muda a cor do retângulo para vermelho
-            cor = (0,0,255) 
-
-            # Incrementa o contador de vagas ocupadas
-            qtVagasOcupadas += 1
+        # Desenhar retângulo e texto na imagem
+        if qt_px_branco > 3000:
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 3)
         else:
-            # Incrementa o contador de vagas abertas
-            qtVagasAbertas += 1
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 3)
+            qt_vagas_abertas += 1
 
-        # Desenha o retângulo da vaga
-        cv2.rectangle(frame, (x,y), (x+w, y+h), cor, 3)
+        cv2.putText(frame, str(qt_px_branco), (x, y + h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
-    # Calcular a porcentagem de vagas livres
-    porcentagemVagasLivres = (qtVagasAbertas / len(vagas)) * 100
+    # Calcular informações adicionais
+    qt_vagas_total = len(vagas)
+    qt_vagas_ocupadas = qt_vagas_total - qt_vagas_abertas
+    porcentagem_vagas_livres = (qt_vagas_abertas / qt_vagas_total) * 100
 
-    # Escreve as informações na imagem
-    info = f"Vagas Abertas: {qtVagasAbertas} | Vagas Ocupadas: {qtVagasOcupadas} | Porcentagem de Vagas Livres: {porcentagemVagasLivres:.2f}%"
-    cv2.putText(frame, info, (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,255), 2, cv2.LINE_AA)
+    # Exibir informações adicionais na imagem
+    cv2.putText(frame, "Vagas Totais: " + str(qt_vagas_total), (10, frame.shape[0] - 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    cv2.putText(frame, "Vagas Ocupadas: " + str(qt_vagas_ocupadas), (10, frame.shape[0] - 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    cv2.putText(frame, "Vagas Livres: " + str(qt_vagas_abertas), (10, frame.shape[0] - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    cv2.putText(frame, "Porcentagem de Vagas Livres: " + "{:.2f}%".format(porcentagem_vagas_livres), (10, frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-    # Mostra o vídeo
+    # Exibir o vídeo e o threshold
     cv2.imshow("Video", frame)
 
-    # Encerra o loop se 'q' for pressionado
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    # Esperar por uma tecla pressionada
+    key = cv2.waitKey(1) & 0xFF
+
+    # Sair do loop se a tecla "q" for pressionada
+    if key == ord('q'):
         break
 
-# Libera o objeto de captura de vídeo
-cap.release()
-
-# Fecha todas as janelas do OpenCV
+# Liberar recursos e fechar janelas
+video.release()
 cv2.destroyAllWindows()
